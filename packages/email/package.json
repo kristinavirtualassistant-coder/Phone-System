@@ -1,4 +1,1 @@
-[Reading 1 lines from start (total: 1 lines, 0 remaining)]
-
 {"name":"@platform/email","private":true,"version":"0.1.0","type":"module","exports":{".":{"types":"./src/index.ts","import":"./dist/index.js"}},"scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc --noEmit -p tsconfig.json"}}
-
