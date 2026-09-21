@@ -1,3 +1,1 @@
 {"name":"@platform/worker-dialer","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"tsx watch src/index.ts","build":"tsc -p tsconfig.json","start":"node dist/index.js","typecheck":"tsc --noEmit -p tsconfig.json"},"devDependencies":{"@types/node":"^24.13.5","tsx":"^4.20.5","typescript":"^5.9.2","@types/pg":"^8.15.5"},"dependencies":{"@platform/telephony":"workspace:*","pg":"^8.16.3","@platform/domain":"workspace:*"}}
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
