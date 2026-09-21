@@ -1,5 +1,3 @@
-[Reading 346 lines from start (total: 346 lines, 0 remaining)]
-
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
@@ -345,5 +343,3 @@ export default function Home() {
     </main>
   );
 }
-
-
