@@ -1,3 +1,1 @@
 {"name":"@platform/compliance","private":true,"version":"0.1.0","type":"module","dependencies":{"@platform/database":"workspace:*","@platform/domain":"workspace:*"},"exports":{".":{"types":"./src/index.ts","import":"./dist/index.js"},"./*":{"types":"./src/*.ts","import":"./dist/*.js"}},"scripts":{"build":"tsc -p tsconfig.json"}}
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
