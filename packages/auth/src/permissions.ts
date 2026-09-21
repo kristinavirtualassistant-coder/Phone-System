@@ -11,5 +11,3 @@ const BASE: Record<Role, readonly Permission[]> = {
 export function hasPermission(role: Role, permission: Permission): boolean {
   return BASE[role].includes(permission);
 }
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
