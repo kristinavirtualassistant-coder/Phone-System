@@ -247,8 +247,7 @@ app.post('/api/v1/auth/register', {
   await query(
     `INSERT INTO email_verification_tokens(id,user_id,token_hash,expires_at)
      VALUES($1,$2,$3,NOW()+($4 || ' seconds')::interval)`,
-    [uuidv7(), userId, sha256(token), config.EMAIL_VERIFICATION_TTL_SECONDS],
-  );
+    [uuidv7(), userId, sha256(token), config.EMAIL_VERIFICATION_TTL_SECONDS],  );
   return reply.code(201).send(ok(request.id, { id: userId, email: body.email }));
 });
 
@@ -497,7 +496,6 @@ app.delete('/api/v1/api-keys/:id', { preHandler: requirePermission('users.manage
   await writeAuditEvent({ tenantId: request.tenantId!, actorUserId: request.userId ?? null, action: 'api_key_revoked', resourceType: 'api_key', resourceId: params.id });
   return reply.code(204).send();
 });
-
 app.get('/api/v1/audit-events', { preHandler: requirePermission('audit.read') }, async (request) => {
   const queryParams = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), after: z.string().optional() }).parse(request.query);
   const result = await withTransaction({ tenantId: request.tenantId!, userId: request.userId ?? null }, async (client) => {
@@ -670,27 +668,32 @@ app.post('/api/v1/webhooks/telnyx/:tenantId/:providerId', { config: { rawBody: t
   const eventType=webhookEventType(request.body) ?? 'unknown';
   const payload=(request.body as {data?:{payload?:Record<string,unknown>;occurred_at?:string}})?.data?.payload ?? {};
   const callControlId=typeof payload.call_control_id==='string' ? payload.call_control_id : undefined;
+  const commandId=typeof payload.command_id==='string' ? payload.command_id : undefined;
   const occurredAt=typeof (request.body as {data?:{occurred_at?:unknown}})?.data?.occurred_at==='string' ? new Date((request.body as {data:{occurred_at:string}}).data.occurred_at) : new Date();
   await withTransaction(params.tenantId, async (tx) => {
-    if(eventId){
+    const callResult=await tx.query<{id:string;state:string}>(
+      `SELECT id,state FROM calls WHERE tenant_id=$1 AND (provider_call_id=$2 OR ($3 IS NOT NULL AND id=$3::uuid))
+       ORDER BY CASE WHEN provider_call_id=$2 THEN 0 ELSE 1 END LIMIT 1`,
+      [params.tenantId,callControlId??'',commandId ?? null],
+    );
+    const call=callResult.rows[0];
+    if(eventId && call){
       const inserted=await tx.query(`INSERT INTO call_events(id,tenant_id,call_id,provider_event_id,event_type,payload,occurred_at)
-        SELECT $1,$2,id,$3,$4,$5,$6 FROM calls WHERE provider_call_id=$7
-        ON CONFLICT (tenant_id,provider_event_id) DO NOTHING RETURNING id`,[uuidv7(),params.tenantId,eventId,eventType,JSON.stringify(request.body),occurredAt,callControlId??'']);
+        VALUES($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (tenant_id,provider_event_id) DO NOTHING RETURNING id`,[uuidv7(),params.tenantId,call.id,eventId,eventType,JSON.stringify(request.body),occurredAt]);
       if(!inserted.rowCount) return;
     }
-    if(!callControlId) return;
+    if(!call) return;
     const eventState: Record<string,string>={'call.initiated':'INITIATED','call.answered':'ANSWERED','call.bridged':'BRIDGED','call.hangup':'ENDED'};
-    if(eventType==='call.recording.saved' && callControlId){
-      const current=await tx.query<{id:string}>('SELECT id FROM calls WHERE provider_call_id=$1',[callControlId]);
-      const call=current.rows[0];
+    if(eventType==='call.recording.saved'){
       const recordingId=typeof payload.recording_id==='string'?payload.recording_id:null;
-      if(call && recordingId) await tx.query(`INSERT INTO recordings(id,tenant_id,call_id,provider_recording_id,status) VALUES($1,$2,$3,$4,'AVAILABLE') ON CONFLICT DO NOTHING`,[uuidv7(),params.tenantId,call.id,recordingId]);
+      if(recordingId) await tx.query(`INSERT INTO recordings(id,tenant_id,call_id,provider_recording_id,status,expires_at)
+        VALUES($1,$2,$3,$4,'AVAILABLE',NOW() + ($5 || ' days')::interval) ON CONFLICT DO NOTHING`,
+        [uuidv7(),params.tenantId,call.id,recordingId,config.RECORDING_RETENTION_DAYS]);
       return;
     }
     const next=eventState[eventType];
     if(!next) return;
-    const current=await tx.query<{id:string;state:string}>('SELECT id,state FROM calls WHERE provider_call_id=$1',[callControlId]);
-    const call=current.rows[0]; if(!call) return;
     try{assertTransition(call.state as Parameters<typeof assertTransition>[0],next as Parameters<typeof assertTransition>[1]);}
     catch{return;}
     const terminal=next==='ENDED';
@@ -718,4 +721,3 @@ process.on('SIGTERM', shutdown);
 
 await registerCommunicationRoutes(app);
 await app.listen({ host: '0.0.0.0', port: config.PORT });
-
