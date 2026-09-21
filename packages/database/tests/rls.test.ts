@@ -1,5 +1,3 @@
-[Reading 37 lines from start (total: 37 lines, 0 remaining)]
-
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -37,4 +35,3 @@ describe.skipIf(!url)('PostgreSQL RLS', () => {
     }
   });
 });
-
