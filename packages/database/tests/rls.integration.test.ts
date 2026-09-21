@@ -1,5 +1,3 @@
-[Reading 128 lines from start (total: 128 lines, 0 remaining)]
-
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 
@@ -128,4 +126,3 @@ describe.skipIf(!databaseUrl)('PostgreSQL tenant isolation', () => {
     await client.query('ROLLBACK');
   });
 });
-
