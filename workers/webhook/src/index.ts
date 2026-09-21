@@ -1,8 +1,9 @@
-[Reading 12 lines from start (total: 12 lines, 0 remaining)]
-
-import { pool, withTransaction } from '@platform/database';
+import { withTransaction } from '@platform/database';
 import { uuidv7 } from '@platform/domain';
 import { normalizePhone, normalizeProviderStatus } from '@platform/messaging';
+import pg from 'pg';
+const { Pool } = pg;
+const adminPool = new Pool({ connectionString: process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL, max: 10 });
 const running={value:true};process.on('SIGINT',()=>{running.value=false});process.on('SIGTERM',()=>{running.value=false});
 async function processEvent(row:any){const body=row.payload;const payload=body?.data?.payload??{};const eventType=String(row.event_type??'');if(row.provider==='gmail'||row.provider==='microsoft'){await withTransaction(row.tenant_id,tx=>tx.query('UPDATE communication_webhook_events SET processed_at=NOW(),attempts=attempts+1 WHERE id=$1',[row.id]));return;}
 const providerMessageId=String(payload.id??'');if(eventType.includes('message')&&!eventType.includes('received')){const status=normalizeProviderStatus(String(payload.to?.status??payload.status??eventType));await withTransaction(row.tenant_id,async tx=>{const m=(await tx.query<{id:string;conversation_id:string;status:string}>('SELECT id,conversation_id,status FROM messages WHERE tenant_id=$1 AND provider_message_id=$2',[row.tenant_id,providerMessageId])).rows[0];if(!m)return;const order:any={QUEUED:0,SENT:1,DELIVERED:2,FAILED:3,RECEIVED:3,OPTED_OUT:4};if(order[status]<order[m.status])return;await tx.query('UPDATE messages SET status=$2,sent_at=CASE WHEN $2=\'SENT\' THEN COALESCE(sent_at,NOW()) ELSE sent_at END,delivered_at=CASE WHEN $2=\'DELIVERED\' THEN COALESCE(delivered_at,NOW()) ELSE delivered_at END,failed_at=CASE WHEN $2=\'FAILED\' THEN COALESCE(failed_at,NOW()) ELSE failed_at END WHERE id=$1',[m.id,status]);const event=`message.${status.toLowerCase()}`;const contact=(await tx.query<{contact_id:string}>('SELECT contact_id FROM conversations WHERE id=$1',[m.conversation_id])).rows[0];if(contact)await tx.query(`INSERT INTO engagement_events(id,tenant_id,conversation_id,contact_id,event_type,subject_id,data,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,[uuidv7(),row.tenant_id,m.conversation_id,contact.contact_id,event,m.id,JSON.stringify({provider:'telnyx'}),row.occurred_at??new Date()]);});}
@@ -10,6 +11,5 @@ if(eventType.includes('message.received')||eventType.includes('received')){const
 await withTransaction(row.tenant_id,tx=>tx.query('UPDATE communication_webhook_events SET processed_at=NOW(),attempts=attempts+1,last_error=NULL WHERE id=$1',[row.id]));}
 async function failEvent(row:any,error:unknown){await withTransaction(row.tenant_id,tx=>tx.query('UPDATE communication_webhook_events SET attempts=attempts+1,last_error=$2,processed_at=CASE WHEN attempts+1>=10 THEN NOW() ELSE processed_at END WHERE id=$1',[row.id,error instanceof Error?error.message:'webhook processing failed']));}
 console.log('communication webhook worker ready');
-while(running.value){const rows=(await pool.query(`SELECT * FROM communication_webhook_events WHERE processed_at IS NULL AND attempts<10 ORDER BY received_at ASC LIMIT 25`)).rows;for(const row of rows){try{await processEvent(row);}catch(e){await failEvent(row,e);}}await new Promise(r=>setTimeout(r,1000));}
-await pool.end();
-
+while(running.value){const rows=(await adminPool.query(`SELECT * FROM communication_webhook_events WHERE processed_at IS NULL AND attempts<10 ORDER BY received_at ASC LIMIT 25`)).rows;for(const row of rows){try{await processEvent(row);}catch(e){await failEvent(row,e);}}await new Promise(r=>setTimeout(r,1000));}
+await adminPool.end();
