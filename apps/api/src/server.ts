@@ -1,4 +1,3 @@
-[Reading 721 lines from start (total: 721 lines, 0 remaining)]
 
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -721,5 +720,3 @@ process.on('SIGTERM', shutdown);
 await registerCommunicationRoutes(app);
 await app.listen({ host: '0.0.0.0', port: config.PORT });
 
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
