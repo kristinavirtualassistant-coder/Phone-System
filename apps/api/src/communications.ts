@@ -1,5 +1,3 @@
-[Reading 79 lines from start (total: 79 lines, 0 remaining)]
-
 import type { FastifyInstance } from 'fastify';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -79,4 +77,3 @@ export async function registerCommunicationRoutes(app: any) {
   async function getValidTokens(account:any,provider:any){let access=decryptMfaSecret(account.access_token_encrypted,config.MFA_ENCRYPTION_KEY);if(account.token_expires_at&&new Date(account.token_expires_at).getTime()<Date.now()+60_000){if(!account.refresh_token_encrypted)throw new Error('Mailbox token expired and no refresh token is available');const refreshed=await provider.refresh(decryptMfaSecret(account.refresh_token_encrypted,config.MFA_ENCRYPTION_KEY));access=refreshed.accessToken;await withTransaction(account.tenant_id,tx=>tx.query('UPDATE email_accounts SET access_token_encrypted=$2,token_expires_at=$3,last_error=NULL,updated_at=NOW() WHERE id=$1',[account.id,encryptMfaSecret(access,config.MFA_ENCRYPTION_KEY),refreshed.expiresAt??null]));}return {accessToken:access, ...(account.refresh_token_encrypted?{refreshToken:decryptMfaSecret(account.refresh_token_encrypted,config.MFA_ENCRYPTION_KEY)}:{})};}
   function emailAddress(v:string){return v;}
 }
-
