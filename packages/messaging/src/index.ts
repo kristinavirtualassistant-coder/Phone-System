@@ -1,5 +1,3 @@
-[Reading 45 lines from start (total: 45 lines, 0 remaining)]
-
 export const MESSAGE_STATES = ['QUEUED','SENT','DELIVERED','FAILED','RECEIVED','OPTED_OUT'] as const;
 export type MessageState = typeof MESSAGE_STATES[number];
 export type MessageChannel = 'SMS'|'MMS'|'EMAIL';
@@ -45,4 +43,3 @@ export function normalizeProviderStatus(value: string): MessageState {
   if (['opted_out','opt-out','blocked'].includes(v)) return 'OPTED_OUT';
   return 'FAILED';
 }
-
