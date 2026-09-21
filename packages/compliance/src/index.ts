@@ -1,5 +1,3 @@
-[Reading 43 lines from start (total: 43 lines, 0 remaining)]
-
 import { uuidv7 } from '@platform/domain';
 import { withTransaction } from '@platform/database';
 
@@ -42,5 +40,3 @@ export async function recordOptOut(tenantId:string, phone:string, source='inboun
     await tx.query(`UPDATE communication_contacts SET consent_status='OPTED_OUT',updated_at=NOW() WHERE tenant_id=$1 AND phone_e164=$2`,[tenantId,phone]);
   });
 }
-
-
