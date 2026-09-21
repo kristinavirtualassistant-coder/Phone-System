@@ -1,5 +1,3 @@
-[Reading 11 lines from start (total: 11 lines, 0 remaining)]
-
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { randomUUID } from 'node:crypto';
@@ -11,4 +9,3 @@ describe.skipIf(!url)('communication tenant isolation',()=>{
  it('prevents cross-tenant communication reads',async()=>{await admin.query('BEGIN');await admin.query('SET LOCAL ROLE platform_app');await admin.query("SELECT set_config('app.tenant_id',$1,true)",[a]);const contacts=await admin.query('SELECT id FROM communication_contacts ORDER BY id');const convs=await admin.query('SELECT tenant_id FROM conversations ORDER BY tenant_id');expect(contacts.rows).toHaveLength(1);expect(contacts.rows[0].id).toBe(ca);expect(convs.rows).toEqual([{tenant_id:a}]);await admin.query('ROLLBACK');});
  it('rejects cross-tenant communication inserts',async()=>{await admin.query('BEGIN');await admin.query('SET LOCAL ROLE platform_app');await admin.query("SELECT set_config('app.tenant_id',$1,true)",[a]);await expect(admin.query(`INSERT INTO communication_contacts(id,tenant_id,phone_e164) VALUES($1,$2,'+14155550003')`,[randomUUID(),b])).rejects.toThrow();await admin.query('ROLLBACK');});
 });
-
