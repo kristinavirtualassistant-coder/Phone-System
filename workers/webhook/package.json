@@ -1,4 +1,1 @@
-[Reading 1 lines from start (total: 1 lines, 0 remaining)]
-
-{"name":"@platform/worker-webhook","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"tsx watch src/index.ts","build":"tsc -p tsconfig.json","start":"node dist/index.js","typecheck":"tsc --noEmit -p tsconfig.json"},"dependencies":{"@platform/database":"workspace:*","@platform/domain":"workspace:*","@platform/messaging":"workspace:*"},"devDependencies":{"@types/node":"^24.13.5","tsx":"^4.20.5","typescript":"^5.9.2"}}
-
+{"name":"@platform/worker-webhook","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"tsx watch src/index.ts","build":"tsc -p tsconfig.json","start":"node dist/index.js","typecheck":"tsc --noEmit -p tsconfig.json"},"dependencies":{"@platform/database":"workspace:*","@platform/domain":"workspace:*","@platform/messaging":"workspace:*","pg":"^8.23.0"},"devDependencies":{"@types/node":"^24.13.5","@types/pg":"^8.23.1","tsx":"^4.20.5","typescript":"^5.9.2"}}
