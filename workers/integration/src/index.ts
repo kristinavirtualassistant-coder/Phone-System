@@ -1,5 +1,3 @@
-[Reading 19 lines from start (total: 19 lines, 0 remaining)]
-
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { pool, withTransaction } from '@platform/database';
 import { uuidv7 } from '@platform/domain';
@@ -19,4 +17,3 @@ let running=true;process.on('SIGINT',()=>{running=false});process.on('SIGTERM',(
 console.log('email integration worker ready');
 while(running){try{const accounts=(await pool.query(`SELECT * FROM email_accounts WHERE sync_status<>'DISCONNECTED' AND (last_sync_at IS NULL OR last_sync_at<NOW()-INTERVAL '15 seconds') ORDER BY last_sync_at NULLS FIRST LIMIT 10`)).rows;for(const row of accounts){try{await syncAccount(row);}catch(e){await withTransaction(row.tenant_id,tx=>tx.query('UPDATE email_accounts SET sync_status=\'ERROR\',last_error=$2,updated_at=NOW() WHERE id=$1',[row.id,e instanceof Error?e.message:'sync failed']));}}}catch(e){console.error(e);}await new Promise(r=>setTimeout(r,5000));}
 await pool.end();
-
