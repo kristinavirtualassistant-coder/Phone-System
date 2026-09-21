@@ -3,5 +3,3 @@ ALTER TABLE calls ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS last_error TEXT;
 CREATE INDEX IF NOT EXISTS idx_calls_dial_queue ON calls(state,next_attempt_at,created_at) WHERE state='QUEUED';
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
