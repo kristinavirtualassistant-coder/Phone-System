@@ -29,5 +29,3 @@ export interface ApiErrorBody {
   error: { code: string; message: string; details?: unknown };
   meta: { request_id: string };
 }
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
