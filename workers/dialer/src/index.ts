@@ -4,6 +4,7 @@ import { uuidv7 } from '@platform/domain';
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 20 });
+const adminPool = new Pool({ connectionString: process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL, max: 10 });
 const concurrency = Math.max(1, Number(process.env.DIALER_CONCURRENCY ?? '5'));
 const mode = process.env.DIALER_MODE === 'sequential' ? 'sequential' : 'parallel';
 const pollMs = Math.max(250, Number(process.env.DIALER_POLL_MS ?? '1000'));
@@ -13,11 +14,12 @@ const running = new Set<string>();
 let stopping = false;
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+if (!process.env.DATABASE_ADMIN_URL) throw new Error('DATABASE_ADMIN_URL is required for cross-tenant queue claims');
 if (!publicApiOrigin) throw new Error('PUBLIC_API_ORIGIN is required');
 if (!encryptionKey) throw new Error('TELEPHONY_ENCRYPTION_KEY or MFA_ENCRYPTION_KEY is required');
 
 async function claimBatch(limit: number) {
-  const client = await pool.connect();
+  const client = await adminPool.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query(`
@@ -107,6 +109,21 @@ async function purgeExpiredRecordings() {
   }
 }
 
+async function recoverStaleClaims() {
+  const client = await adminPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`UPDATE calls SET state='QUEUED', next_attempt_at=NOW(), last_error='Recovered stale dialer claim'
+      WHERE state='INITIATED' AND provider_call_id IS NULL AND started_at IS NULL
+        AND created_at < NOW() - INTERVAL '2 minutes' AND dial_attempts < max_attempts`);
+    await client.query(`UPDATE calls SET state='FAILED', ended_at=COALESCE(ended_at,NOW()), last_error='Dialer claim expired after max attempts'
+      WHERE state='INITIATED' AND provider_call_id IS NULL AND started_at IS NULL
+        AND created_at < NOW() - INTERVAL '2 minutes' AND dial_attempts >= max_attempts`);
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+  finally { client.release(); }
+}
+
 async function tick() {
   if (stopping) return;
   const slots = (mode === 'sequential' ? 1 : concurrency) - running.size;
@@ -120,20 +137,22 @@ async function tick() {
 
 const timer = setInterval(() => void tick().catch((error) => console.error('dialer tick failed', error)), pollMs);
 const retentionTimer = setInterval(() => void purgeExpiredRecordings().catch((error) => console.error('recording retention failed', error)), 60_000);
+const recoveryTimer = setInterval(() => void recoverStaleClaims().catch((error) => console.error('dialer recovery failed', error)), 30_000);
 void tick();
 void purgeExpiredRecordings();
+void recoverStaleClaims();
 
 async function shutdown() {
   if (stopping) return;
   stopping = true;
   clearInterval(timer);
   clearInterval(retentionTimer);
+  clearInterval(recoveryTimer);
   while (running.size) await new Promise((resolve) => setTimeout(resolve, 100));
   await pool.end();
+  await adminPool.end();
   process.exit(0);
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 console.log(`worker dialer ready mode=${mode} concurrency=${mode === 'sequential' ? 1 : concurrency}`);
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
