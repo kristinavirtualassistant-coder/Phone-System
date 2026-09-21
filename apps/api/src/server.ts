@@ -620,11 +620,24 @@ app.post('/api/v1/telephony/calls', { preHandler: requirePermission('telephony.m
     max_attempts: z.number().int().min(1).max(5).default(3),
   }).parse(request.body);
   const to = normalizeE164(body.to);
-  const existing = body.idempotency_key ? await withTransaction(request.tenantId!, (tx) => tx.query<{ response_body: unknown }>(
-    `SELECT response_body FROM idempotency_keys WHERE tenant_id=$1 AND idempotency_key=$2 AND expires_at>NOW()`, [request.tenantId, body.idempotency_key])) : null;
-  if (existing?.rows[0]) return reply.code(200).send(existing.rows[0].response_body);
 
   const queued = await withTransaction({ tenantId: request.tenantId!, userId: request.userId ?? null }, async (tx) => {
+    if (body.idempotency_key) {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`telephony-call:${request.tenantId}:${body.idempotency_key}`]);
+      const existing = await tx.query<{ response_body: unknown; request_hash: string }>(
+        `SELECT response_body,request_hash FROM idempotency_keys
+         WHERE tenant_id=$1 AND idempotency_key=$2 AND expires_at>NOW()`,
+        [request.tenantId, body.idempotency_key],
+      );
+      if (existing.rows[0]) {
+        const requestHash = sha256(JSON.stringify(body));
+        if (existing.rows[0].request_hash !== requestHash) {
+          throw Object.assign(new Error('Idempotency key was already used with a different request'), { statusCode: 409, code: 'IDEMPOTENCY_KEY_REUSE' });
+        }
+        return { existingResponse: existing.rows[0].response_body };
+      }
+    }
+
     const result = await tx.query<{ e164:string }>(
       `SELECT n.e164 FROM phone_numbers n JOIN telephony_providers p ON p.id=n.provider_id
        WHERE n.id=$1 AND n.tenant_id=$2 AND n.provider_id=$3 AND n.status='ACTIVE' AND p.status='ACTIVE'`,
@@ -641,9 +654,10 @@ app.post('/api/v1/telephony/calls', { preHandler: requirePermission('telephony.m
     if (body.idempotency_key) await tx.query(`INSERT INTO idempotency_keys(id,tenant_id,idempotency_key,request_hash,response_status,response_body,expires_at)
       VALUES($1,$2,$3,$4,202,$5,NOW()+INTERVAL '24 hours') ON CONFLICT DO NOTHING`,
       [uuidv7(),request.tenantId,body.idempotency_key,sha256(JSON.stringify(body)),JSON.stringify(response)]);
-    return response;
+    return { existingResponse: null, response };
   });
-  return reply.code(202).send(queued);
+  if (queued.existingResponse) return reply.code(200).send(queued.existingResponse);
+  return reply.code(202).send(queued.response);
 });
 
 app.get('/api/v1/telephony/calls/:id', { preHandler: requirePermission('telephony.read') }, async (request, reply) => {
