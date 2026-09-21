@@ -710,7 +710,14 @@ app.post('/api/v1/webhooks/telnyx/:tenantId/:providerId', { config: { rawBody: t
     try{assertTransition(call.state as Parameters<typeof assertTransition>[0],next as Parameters<typeof assertTransition>[1]);}
     catch{return;}
     const terminal=next==='ENDED';
-    await tx.query(`UPDATE calls SET state=$2,answered_at=CASE WHEN $2='ANSWERED' THEN COALESCE(answered_at,NOW()) ELSE answered_at END,ended_at=CASE WHEN $2='ENDED' THEN COALESCE(ended_at,NOW()) ELSE ended_at END,duration_seconds=CASE WHEN $2='ENDED' AND started_at IS NOT NULL THEN GREATEST(0,EXTRACT(EPOCH FROM (NOW()-started_at))::INTEGER) ELSE duration_seconds END WHERE id=$1`,[call.id,next]);
+    await tx.query(`UPDATE calls
+      SET state=$2,
+          provider_call_id=CASE WHEN $2='INITIATED' AND $3 IS NOT NULL THEN COALESCE(provider_call_id,$3) ELSE provider_call_id END,
+          started_at=CASE WHEN $2='INITIATED' THEN COALESCE(started_at,$4) ELSE started_at END,
+          answered_at=CASE WHEN $2='ANSWERED' THEN COALESCE(answered_at,$4) ELSE answered_at END,
+          ended_at=CASE WHEN $2='ENDED' THEN COALESCE(ended_at,$4) ELSE ended_at END,
+          duration_seconds=CASE WHEN $2='ENDED' AND started_at IS NOT NULL THEN GREATEST(0,EXTRACT(EPOCH FROM ($4-started_at))::INTEGER) ELSE duration_seconds END
+      WHERE id=$1`,[call.id,next,callControlId,occurredAt]);
     await tx.query(`UPDATE call_legs SET state=$2,answered_at=CASE WHEN $2='ANSWERED' THEN COALESCE(answered_at,NOW()) ELSE answered_at END,ended_at=CASE WHEN $2='ENDED' THEN COALESCE(ended_at,NOW()) ELSE ended_at END WHERE call_id=$1 AND provider_call_id=$3`,[call.id,next,callControlId]);
     if(terminal) await tx.query(`UPDATE calls SET disposition=COALESCE(disposition,CASE WHEN $1='call.hangup' THEN 'COMPLETED' ELSE disposition END) WHERE id=$2`,[eventType,call.id]);
   });
