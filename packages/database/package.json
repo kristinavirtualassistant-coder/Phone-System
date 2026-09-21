@@ -1,3 +1,1 @@
 {"name":"@platform/database","private":true,"version":"0.1.0","type":"module","exports":{".":{"types":"./src/index.ts","import":"./dist/index.js"},"./*":{"types":"./src/*.ts","import":"./dist/*.js"}},"scripts":{"migrate":"tsx scripts/migrate.ts","test":"vitest run","build":"tsc -p tsconfig.json"},"dependencies":{"pg":"^8.16.3"},"devDependencies":{"@types/pg":"^8.23.1","tsx":"^4.20.5","vitest":"^5.0.1"}}
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
