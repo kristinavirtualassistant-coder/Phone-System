@@ -65,9 +65,17 @@ async function processCall(call: any) {
     await client.query('ROLLBACK');
     const message = error instanceof Error ? error.message : 'Dial attempt failed';
     const retry = call.dial_attempts < call.max_attempts;
-    await client.query('BEGIN');
-    await client.query(`UPDATE calls SET state=$2,last_error=$3,next_attempt_at=NOW()+($4 || ' seconds')::interval,ended_at=CASE WHEN $2='FAILED' THEN NOW() ELSE ended_at END WHERE id=$1`, [call.id,retry?'QUEUED':'FAILED',message,retry ? Math.min(300, 2 ** call.dial_attempts * 5) : 0]);
-    await client.query('COMMIT');
+    const recoveryClient = await adminPool.connect();
+    try {
+      await recoveryClient.query('BEGIN');
+      await recoveryClient.query(`UPDATE calls SET state=$2,last_error=$3,next_attempt_at=NOW()+($4 || ' seconds')::interval,ended_at=CASE WHEN $2='FAILED' THEN NOW() ELSE ended_at END WHERE id=$1`, [call.id,retry?'QUEUED':'FAILED',message,retry ? Math.min(300, 2 ** call.dial_attempts * 5) : 0]);
+      await recoveryClient.query('COMMIT');
+    } catch (recoveryError) {
+      await recoveryClient.query('ROLLBACK');
+      console.error('dialer failure-state update failed', call.id, recoveryError);
+    } finally {
+      recoveryClient.release();
+    }
   } finally { client.release(); }
 }
 
