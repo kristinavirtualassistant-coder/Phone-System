@@ -29,5 +29,3 @@ describe('Telnyx webhook verification', () => {
     expect(client.verifyWebhook(raw, signature, String(Number(timestamp) - 1000))).toBe(false);
   });
 });
-
-[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
