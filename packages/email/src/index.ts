@@ -1,5 +1,3 @@
-[Reading 29 lines from start (total: 29 lines, 0 remaining)]
-
 export type EmailProviderName = 'GOOGLE'|'MICROSOFT';
 export interface EmailAccountTokens { accessToken: string; refreshToken?: string; expiresAt?: Date; }
 export interface EmailMessage { id: string; threadId?: string; rfcMessageId?: string; from: string; to: string[]; subject?: string; text?: string; html?: string; receivedAt?: string; inReplyTo?: string; }
@@ -29,4 +27,3 @@ export class MicrosoftEmailProvider implements EmailProvider {
  async getMessage(t: EmailAccountTokens,id:string): Promise<EmailMessage>{const r=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}` ,{headers:this.headers(t)});if(!r.ok)throw new Error(`Microsoft get failed: ${r.status}`);const j=await r.json() as any;return {id:j.id,threadId:j.conversationId,rfcMessageId:j.internetMessageId,from:j.from?.emailAddress?.address??'',to:(j.toRecipients??[]).map((x:any)=>x.emailAddress?.address).filter(Boolean),subject:j.subject,text:j.body?.content,receivedAt:j.receivedDateTime,inReplyTo:j.internetMessageHeaders?.find((x:any)=>x.name.toLowerCase()==='in-reply-to')?.value};}
  async syncMessages(t: EmailAccountTokens,cursor?:string){const url=cursor??'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$select=id,conversationId,internetMessageId,from,toRecipients,subject,body,receivedDateTime';const r=await fetch(url,{headers:this.headers(t)});if(!r.ok)throw new Error(`Microsoft sync failed: ${r.status}`);const j=await r.json() as any;const messages=[] as EmailMessage[];for(const item of j.value??[]){if(item['@removed'])continue;messages.push({id:item.id,threadId:item.conversationId,rfcMessageId:item.internetMessageId,from:item.from?.emailAddress?.address??'',to:(item.toRecipients??[]).map((x:any)=>x.emailAddress?.address).filter(Boolean),subject:item.subject,text:item.body?.content,receivedAt:item.receivedDateTime});}return {messages,nextCursor:j['@odata.nextLink']??j['@odata.deltaLink']};}
 }
-
