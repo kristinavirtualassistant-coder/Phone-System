@@ -576,7 +576,7 @@ app.post('/api/v1/telephony/providers/:id/browser-token', { preHandler: requireP
     const credential = await client.createTelephonyCredential(`browser-${request.userId ?? 'api'}-${Date.now()}`, row.connection_id, expiresAt);
     const token = await client.createCredentialToken(credential.id);
     await withTransaction(request.tenantId!, (tx) => tx.query('UPDATE telephony_providers SET credential_id=$2,updated_at=NOW() WHERE id=$1',[params.id,credential.id]));
-    return ok(request.id, { token, expires_in: 86400 });
+    return ok(request.id, { token, expires_in: 900 });
   } catch (error) {
     return reply.code(502).send(fail(request.id, 502, 'TELNYX_TOKEN_FAILED', error instanceof Error ? error.message : 'Telnyx token request failed').body);
   }
