@@ -1,3 +1,5 @@
+[Reading 721 lines from start (total: 721 lines, 0 remaining)]
+
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
@@ -340,7 +342,7 @@ app.post('/api/v1/auth/password-reset/request', {
        VALUES($1,$2,$3,NOW()+($4 || ' seconds')::interval)`,
       [uuidv7(), user.rows[0].id, sha256(token), config.PASSWORD_RESET_TTL_SECONDS],
     );
-    request.log.info({ user_id: user.rows[0].id, reset_token: token }, 'development password reset token');
+    request.log.info({ user_id: user.rows[0].id }, 'password reset requested');
   }
   return ok(request.id, { accepted: true });
 });
@@ -718,3 +720,6 @@ process.on('SIGTERM', shutdown);
 
 await registerCommunicationRoutes(app);
 await app.listen({ host: '0.0.0.0', port: config.PORT });
+
+
+[executed on device: codespaces-73d925 (e215b2d9-1319-4805-9ed4-b434928d4042)]
