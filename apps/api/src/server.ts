@@ -634,7 +634,7 @@ app.post('/api/v1/telephony/calls', { preHandler: requirePermission('telephony.m
         if (existing.rows[0].request_hash !== requestHash) {
           throw Object.assign(new Error('Idempotency key was already used with a different request'), { statusCode: 409, code: 'IDEMPOTENCY_KEY_REUSE' });
         }
-        return { existingResponse: existing.rows[0].response_body };
+        return { response: existing.rows[0].response_body, status: 200 as const };
       }
     }
 
@@ -654,10 +654,9 @@ app.post('/api/v1/telephony/calls', { preHandler: requirePermission('telephony.m
     if (body.idempotency_key) await tx.query(`INSERT INTO idempotency_keys(id,tenant_id,idempotency_key,request_hash,response_status,response_body,expires_at)
       VALUES($1,$2,$3,$4,202,$5,NOW()+INTERVAL '24 hours') ON CONFLICT DO NOTHING`,
       [uuidv7(),request.tenantId,body.idempotency_key,sha256(JSON.stringify(body)),JSON.stringify(response)]);
-    return { existingResponse: null, response };
+    return { response, status: 202 as const };
   });
-  if (queued.existingResponse) return reply.code(200).send(queued.existingResponse);
-  return reply.code(202).send(queued.response);
+  return reply.code(queued.status).send(queued.response);
 });
 
 app.get('/api/v1/telephony/calls/:id', { preHandler: requirePermission('telephony.read') }, async (request, reply) => {
