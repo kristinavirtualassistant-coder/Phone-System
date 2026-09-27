@@ -15,9 +15,9 @@ type ApiResponse = {
 async function api(path: string, body?: Record<string, unknown>) {
   const response = await fetch(`${API_BASE}${path}`, {
     method: body ? 'POST' : 'GET',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    ...(body ? { headers: { 'Content-Type': 'application/json' } } : {}),
     credentials: 'include',
-    body: body ? JSON.stringify(body) : undefined,
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const payload = (await response.json().catch(() => ({}))) as ApiResponse;
   if (!response.ok) {

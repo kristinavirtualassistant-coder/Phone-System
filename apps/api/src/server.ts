@@ -3,8 +3,8 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import Redis from 'ioredis';
-import { randomUUIDv7 } from 'node:crypto';
+import { Redis } from 'ioredis';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   generateRecoveryCodes, hashPassword, hashRecoveryCode, hashSecret,
@@ -20,7 +20,7 @@ import { decryptMfaSecret, encryptMfaSecret, secret, sha256 } from './security.j
 const redis = new Redis(config.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 2 });
 const app = Fastify({
   loggerInstance: logger,
-  genReqId: () => randomUUIDv7(),
+  genReqId: () => randomUUID(),
   trustProxy: true,
 });
 
@@ -102,7 +102,7 @@ async function authenticate(request: import('fastify').FastifyRequest, reply: im
       },
     );
     if (key) {
-      request.userId = undefined;
+      // request.userId = undefined;
       request.tenantId = key.tenant_id;
       request.authType = 'api_key';
       request.headers['x-api-scopes'] = JSON.stringify(key.scopes);
@@ -144,13 +144,13 @@ async function requireAuth(request: import('fastify').FastifyRequest, reply: imp
 
 async function withRequestTenant<T>(
   request: import('fastify').FastifyRequest,
-  fn: (client: import('pg').PoolClient) => Promise<T>,
+  fn: (client: import('@platform/database').PoolClient) => Promise<T>,
 ): Promise<T> {
   if (!request.tenantId) throw new Error('Tenant context is required');
-  return withTransaction({ tenantId: request.tenantId, userId: request.userId }, fn);
+  return withTransaction({ tenantId: request.tenantId, userId: request.userId ?? null }, fn);
 }
 
-async function requirePermission(permission: import('@platform/domain/types').Permission) {
+function requirePermission(permission: import('@platform/domain/types').Permission) {
   return async (request: import('fastify').FastifyRequest, reply: import('fastify').FastifyReply) => {
     const result = await requireAuth(request, reply);
     if (result) return result;
@@ -231,7 +231,7 @@ app.post('/api/v1/auth/register', {
     return reply.code(409).send(fail(request.id, 409, 'EMAIL_ALREADY_REGISTERED', 'Email is already registered').body);
   }
 
-  const userId = randomUUIDv7();
+  const userId = randomUUID();
   const token = randomToken();
   await query(
     `INSERT INTO users(id,email,email_normalized,password_hash,first_name,last_name)
@@ -241,7 +241,7 @@ app.post('/api/v1/auth/register', {
   await query(
     `INSERT INTO email_verification_tokens(id,user_id,token_hash,expires_at)
      VALUES($1,$2,$3,NOW()+($4 || ' seconds')::interval)`,
-    [randomUUIDv7(), userId, sha256(token), config.EMAIL_VERIFICATION_TTL_SECONDS],
+    [randomUUID(), userId, sha256(token), config.EMAIL_VERIFICATION_TTL_SECONDS],
   );
   return reply.code(201).send(ok(request.id, { id: userId, email: body.email }));
 });
@@ -302,7 +302,7 @@ app.post('/api/v1/auth/login', {
   await query(
     `INSERT INTO sessions(id,user_id,token_hash,authenticated_at,expires_at)
      VALUES($1,$2,$3,NOW(),NOW()+($4 || ' seconds')::interval)`,
-    [randomUUIDv7(), user.id, sha256(rawSession), config.SESSION_TTL_SECONDS],
+    [randomUUID(), user.id, sha256(rawSession), config.SESSION_TTL_SECONDS],
   );
   await query('UPDATE users SET last_login_at=NOW(),updated_at=NOW() WHERE id=$1', [user.id]);
   await writeAuditEvent({ tenantId: null, actorUserId: user.id, action: 'login' });
@@ -317,7 +317,7 @@ app.post('/api/v1/auth/login', {
 app.post('/api/v1/auth/logout', { preHandler: requireAuth }, async (request, reply) => {
   const session = request.cookies.session;
   if (session) await query('UPDATE sessions SET revoked_at=NOW() WHERE token_hash=$1', [sha256(session)]);
-  if (request.userId) await writeAuditEvent({ tenantId: request.tenantId ?? null, actorUserId: request.userId, action: 'logout' });
+  if (request.userId) await writeAuditEvent({ tenantId: request.tenantId ?? null, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'logout' });
   reply.clearCookie('session', { path: '/' });
   return reply.code(204).send();
 });
@@ -332,7 +332,7 @@ app.post('/api/v1/auth/password-reset/request', {
     await query(
       `INSERT INTO password_reset_tokens(id,user_id,token_hash,expires_at)
        VALUES($1,$2,$3,NOW()+($4 || ' seconds')::interval)`,
-      [randomUUIDv7(), user.rows[0].id, sha256(token), config.PASSWORD_RESET_TTL_SECONDS],
+      [randomUUID(), user.rows[0].id, sha256(token), config.PASSWORD_RESET_TTL_SECONDS],
     );
     request.log.info({ user_id: user.rows[0].id, reset_token: token }, 'development password reset token');
   }
@@ -404,8 +404,8 @@ app.get('/api/v1/tenants', { preHandler: requireAuth }, async (request, reply) =
 app.post('/api/v1/tenants', { preHandler: requireAuth }, async (request, reply) => {
   if (!request.userId) return reply.code(403).send(fail(request.id, 403, 'FORBIDDEN', 'Session authentication required').body);
   const body = z.object({ name: z.string().min(1).max(150), timezone: z.string().max(64).default('UTC') }).parse(request.body);
-  const tenantId = randomUUIDv7();
-  const membershipId = randomUUIDv7();
+  const tenantId = randomUUID();
+  const membershipId = randomUUID();
   await withTransaction({ tenantId, userId: request.userId }, async (client) => {
     await client.query('INSERT INTO tenants(id,name,timezone) VALUES($1,$2,$3)', [tenantId, body.name, body.timezone]);
     await client.query(
@@ -413,7 +413,7 @@ app.post('/api/v1/tenants', { preHandler: requireAuth }, async (request, reply) 
       [membershipId, tenantId, request.userId, 'OWNER'],
     );
   });
-  await writeAuditEvent({ tenantId, actorUserId: request.userId, action: 'membership_created', resourceType: 'tenant', resourceId: tenantId });
+  await writeAuditEvent({ tenantId, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'membership_created', resourceType: 'tenant', resourceId: tenantId });
   return reply.code(201).send(ok(request.id, { id: tenantId, name: body.name }));
 });
 
@@ -424,7 +424,7 @@ app.post('/api/v1/mfa/setup', { preHandler: requireAuth }, async (request, reply
     `INSERT INTO mfa_credentials(id,user_id,secret_encrypted)
      VALUES($1,$2,$3)
      ON CONFLICT(user_id) DO UPDATE SET secret_encrypted=EXCLUDED.secret_encrypted,enabled_at=NULL`,
-    [randomUUIDv7(), request.userId, encryptMfaSecret(secretValue, config.MFA_ENCRYPTION_KEY)],
+    [randomUUID(), request.userId, encryptMfaSecret(secretValue, config.MFA_ENCRYPTION_KEY)],
   );
   return ok(request.id, { otpauth_uri: createTotpUri(secretValue, request.userId, 'Platform') });
 });
@@ -441,10 +441,10 @@ app.post('/api/v1/mfa/enable', { preHandler: requireAuth }, async (request, repl
     await client.query('UPDATE mfa_credentials SET enabled_at=NOW() WHERE user_id=$1', [request.userId]);
     await client.query('DELETE FROM mfa_recovery_codes WHERE user_id=$1', [request.userId]);
     for (const code of codes) {
-      await client.query('INSERT INTO mfa_recovery_codes(id,user_id,code_hash) VALUES($1,$2,$3)', [randomUUIDv7(), request.userId, await hashRecoveryCode(code)]);
+      await client.query('INSERT INTO mfa_recovery_codes(id,user_id,code_hash) VALUES($1,$2,$3)', [randomUUID(), request.userId, await hashRecoveryCode(code)]);
     }
   });
-  await writeAuditEvent({ tenantId: request.tenantId ?? null, actorUserId: request.userId, action: 'mfa_enabled' });
+  await writeAuditEvent({ tenantId: request.tenantId ?? null, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'mfa_enabled' });
   return ok(request.id, { enabled: true, recovery_codes: codes });
 });
 
@@ -457,21 +457,21 @@ app.post('/api/v1/mfa/disable', { preHandler: requireAuth }, async (request, rep
   }
   await query('UPDATE mfa_credentials SET enabled_at=NULL WHERE user_id=$1', [request.userId]);
   await query('UPDATE mfa_recovery_codes SET used_at=COALESCE(used_at,NOW()) WHERE user_id=$1', [request.userId]);
-  await writeAuditEvent({ tenantId: request.tenantId ?? null, actorUserId: request.userId, action: 'mfa_disabled' });
+  await writeAuditEvent({ tenantId: request.tenantId ?? null, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'mfa_disabled' });
   return ok(request.id, { enabled: false });
 });
 
 app.post('/api/v1/api-keys', { preHandler: requirePermission('users.manage') }, async (request, reply) => {
   const body = z.object({ name: z.string().min(1).max(150), scopes: z.array(z.enum(ALLOWED_API_KEY_SCOPES)).max(50) }).parse(request.body);
   const raw = `pk_${randomToken(32)}`;
-  const id = randomUUIDv7();
-  await withTransaction({ tenantId: request.tenantId!, userId: request.userId ?? null }, async (client) => {
+  const id = randomUUID();
+  await withTransaction({ tenantId: request.tenantId!, ...(request.userId ? { userId: request.userId } : {}) }, async (client) => {
     await client.query(
       'INSERT INTO api_keys(id,tenant_id,name,key_hash,scopes) VALUES($1,$2,$3,$4,$5)',
       [id, request.tenantId, body.name, sha256(raw), JSON.stringify(body.scopes)],
     );
   });
-  await writeAuditEvent({ tenantId: request.tenantId!, actorUserId: request.userId ?? null, action: 'api_key_created', resourceType: 'api_key', resourceId: id });
+  await writeAuditEvent({ tenantId: request.tenantId!, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'api_key_created', resourceType: 'api_key', resourceId: id });
   return reply.code(201).send(ok(request.id, { id, name: body.name, secret: raw, scopes: body.scopes }));
 });
 
@@ -488,13 +488,13 @@ app.delete('/api/v1/api-keys/:id', { preHandler: requirePermission('users.manage
     client.query('UPDATE api_keys SET revoked_at=NOW() WHERE id=$1 RETURNING id', [params.id]),
   );
   if (!result.rowCount) return reply.code(404).send(fail(request.id, 404, 'RESOURCE_NOT_FOUND', 'Resource does not exist').body);
-  await writeAuditEvent({ tenantId: request.tenantId!, actorUserId: request.userId ?? null, action: 'api_key_revoked', resourceType: 'api_key', resourceId: params.id });
+  await writeAuditEvent({ tenantId: request.tenantId!, ...(request.userId ? { actorUserId: request.userId } : {}), action: 'api_key_revoked', resourceType: 'api_key', resourceId: params.id });
   return reply.code(204).send();
 });
 
 app.get('/api/v1/audit-events', { preHandler: requirePermission('audit.read') }, async (request) => {
   const queryParams = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), after: z.string().optional() }).parse(request.query);
-  const result = await withTransaction({ tenantId: request.tenantId!, userId: request.userId ?? null }, async (client) => {
+  const result = await withTransaction({ tenantId: request.tenantId!, ...(request.userId ? { userId: request.userId } : {}) }, async (client) => {
     const values: unknown[] = [queryParams.limit + 1];
     let where = '';
     if (queryParams.after) {
@@ -515,7 +515,7 @@ app.setErrorHandler((error, request, reply) => {
   request.log.error({ err: error, request_id: request.id }, 'request failed');
   const status = error instanceof z.ZodError ? 422 : ((error as { statusCode?: number }).statusCode ?? 500);
   const code = error instanceof z.ZodError ? 'VALIDATION_ERROR' : 'INTERNAL_ERROR';
-  const message = error instanceof z.ZodError ? 'Request validation failed' : status >= 500 ? 'Internal server error' : error.message;
+  const message = error instanceof z.ZodError ? 'Request validation failed' : status >= 500 ? 'Internal server error' : (error as Error).message;
   return reply.code(status).send(fail(request.id, status, code, message, error instanceof z.ZodError ? error.issues : undefined).body);
 });
 

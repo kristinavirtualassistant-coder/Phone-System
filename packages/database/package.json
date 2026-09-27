@@ -1,1 +1,25 @@
-{"name":"@platform/database","private":true,"version":"0.1.0","type":"module","exports":{"./*":"./src/*.ts"},"scripts":{"migrate":"tsx scripts/migrate.ts","test":"tsx tests/rls.test.ts"},"dependencies":{"pg":"^8.16.3"},"devDependencies":{"tsx":"^4.20.5","vitest":"^5.0.1"}}
+{
+  "name": "@platform/database",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./*": "./dist/*.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "migrate": "tsx scripts/migrate.ts",
+    "test": "tsx tests/rls.test.ts"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.20.5",
+    "vitest": "^5.0.1"
+  }
+}

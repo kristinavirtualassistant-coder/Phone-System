@@ -1,5 +1,5 @@
-import { randomUUIDv7 } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 export function uuidv7(): string {
-  return randomUUIDv7();
+  return randomUUID();
 }

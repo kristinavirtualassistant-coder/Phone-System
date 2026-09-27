@@ -1,1 +1,17 @@
-{"name":"@platform/domain","private":true,"version":"0.1.0","type":"module","exports":{"./types":"./src/types.ts","./ids":"./src/ids.ts","./*":"./src/*.ts"}}
+{
+  "name": "@platform/domain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types.js",
+    "./ids": "./dist/ids.js",
+    "./*": "./dist/*.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

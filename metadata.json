@@ -1,0 +1,7 @@
+{
+  "name": "Phone System Sales Engagement Platform",
+  "description": "Secure multi-tenant sales engagement platform with phone system, dialer, messaging, campaigns, sequences, and role-based access control.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

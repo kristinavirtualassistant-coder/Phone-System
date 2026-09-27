@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient } from '@platform/database';
 
 export async function revokeUserSessions(
   client: PoolClient,
